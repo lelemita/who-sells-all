@@ -66,17 +66,10 @@ const RESP_ITEMLOOKUP = `{
 	]
 }`
 
-func itemLookUp(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprint(w, RESP_ITEMLOOKUP)
-}
-
-func RunMockServer() *http.Server {
+func RunAladdinApiMock() {
 	srv := &http.Server{Addr: ":8081"}
-	http.HandleFunc("/api/itemLookUp.aspx", itemLookUp)
-
-	go srv.ListenAndServe()
-	// if err := srv.ListenAndServe(); err != nil {
-	// 	log.Fatalf("error during aladdin mock server run: %v", err)
-	// }
-	return srv
+	http.HandleFunc("/api/itemLookUp.aspx", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, RESP_ITEMLOOKUP)
+	})
+	srv.ListenAndServe()
 }
