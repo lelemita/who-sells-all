@@ -57,7 +57,7 @@ func (s *Searcher) CrawlProposals(itemInfo searcher.ItemLookUpResult) (*searcher
 	// TODO
 	// https://www.aladin.co.kr/shop/UsedShop/wuseditemall.aspx?ItemId=284863481&TabType=0&SortOrder=9&page=1
 	// 여기서 page 결과 없을 때까지 page 올리면서 crawling 하면 됨.
-	// TabTyle, SortOrder 상수로 빼뒀음
+	// TabType, SortOrder 상수로 빼뒀음
 	// parameter: itemId만 필요한데? GetByIsbn 에서도 그것만 얻도록 고쳐야 하나.... 아깝긴 하지만.
 
 	return nil, nil
