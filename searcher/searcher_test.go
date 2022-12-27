@@ -1,23 +1,24 @@
-package whosellsall_test
+package searcher_test
 
 import (
 	"fmt"
 	"os"
 	"testing"
 
-	whosellsall "github.com/lelemita/who_sells_all"
+	"github.com/lelemita/who_sells_all/mock"
+	searcher "github.com/lelemita/who_sells_all/searcher/mock"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestMain(m *testing.M) {
-	fmt.Println("Set up stuff for tests here")
+	go mock.RunAladdinApiMock()
 	exitVal := m.Run()
 	fmt.Println("Clean up stuff after test here")
 	os.Exit(exitVal)
 }
 
 func TestGetByIsbn(t *testing.T) {
-	searcher := whosellsall.NewSearcher()
+	searcher := searcher.NewSearcher()
 
 	testIsbn := "9772799628000"
 	tests := []struct {

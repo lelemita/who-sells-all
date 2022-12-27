@@ -1,25 +1,8 @@
-package whosellsall
+package searcher
 
-import (
-	"os"
+const (
+	PATH_ITEM_LOOK_UP = "/ttb/api/ItemLookUp.aspx"
 )
-
-type SellerId string
-
-type Proposal struct {
-	Isbn   string
-	Price  int
-	Status string
-	Link   string
-}
-
-type OneResult struct {
-	Proposals map[SellerId]Proposal
-}
-
-type Searcher struct {
-	ttbkey string
-}
 
 type ItemLookUpResult struct {
 	Item []struct {
@@ -40,11 +23,19 @@ type UsedInfo struct {
 	Link      string `json:"link"`
 }
 
-func NewSearcher() Searcher {
-	ttbkey := os.Getenv("ttbkey")
-	return Searcher{ttbkey}
+type SellerId string
+
+type Proposal struct {
+	Isbn   string
+	Price  int
+	Status string
+	Link   string
 }
 
-func (s *Searcher) GetByIsbn(isbn string) (OneResult, error) {
-	return OneResult{}, nil
+type OneResult struct {
+	Proposals map[SellerId]Proposal
+}
+
+type Searcher interface {
+	GetByIsbn(isbn string) (OneResult, error)
 }

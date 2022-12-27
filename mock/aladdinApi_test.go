@@ -8,8 +8,8 @@ import (
 	"os"
 	"testing"
 
-	whosellsall "github.com/lelemita/who_sells_all"
 	"github.com/lelemita/who_sells_all/mock"
+	"github.com/lelemita/who_sells_all/searcher"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -32,19 +32,19 @@ func TestItemLookUp(t *testing.T) {
 	for _, tc := range tests {
 		assert := assert.New(t)
 		t.Run(tc.title, func(t *testing.T) {
-			resp, err := http.Get("http://localhost:8081/api/itemLookUp.aspx")
+			resp, err := http.Get("http://localhost:8081/ttb/api/ItemLookUp.aspx")
 			assert.Nil(err)
 			assert.NotNil(resp)
 			assert.Equal(tc.statusCode, resp.StatusCode)
 
 			jsonByte, err := io.ReadAll(resp.Body)
 			assert.Nil(err)
-			respInfo := whosellsall.ItemLookUpResult{}
+			respInfo := searcher.ItemLookUpResult{}
 			if err := json.Unmarshal(jsonByte, &respInfo); err != nil {
 				log.Fatalf("error during parsing json: %v", err)
 			}
 
-			mockInfo := whosellsall.ItemLookUpResult{}
+			mockInfo := searcher.ItemLookUpResult{}
 			if err := json.Unmarshal([]byte(mock.RESP_ITEMLOOKUP), &mockInfo); err != nil {
 				log.Fatalf("error during parsing mock data: %v", err)
 			}

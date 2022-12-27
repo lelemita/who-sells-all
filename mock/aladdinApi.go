@@ -68,7 +68,7 @@ const RESP_ITEMLOOKUP = `{
 
 func RunAladdinApiMock() {
 	srv := &http.Server{Addr: ":8081"}
-	http.HandleFunc("/api/itemLookUp.aspx", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/ttb/api/ItemLookUp.aspx", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, RESP_ITEMLOOKUP)
 	})
 	srv.ListenAndServe()
