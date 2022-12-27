@@ -35,6 +35,7 @@ func TestItemLookUp(t *testing.T) {
 			resp, err := http.Get("http://localhost:8081/ttb/api/ItemLookUp.aspx")
 			assert.Nil(err)
 			assert.NotNil(resp)
+			defer resp.Body.Close()
 			assert.Equal(tc.statusCode, resp.StatusCode)
 
 			jsonByte, err := io.ReadAll(resp.Body)

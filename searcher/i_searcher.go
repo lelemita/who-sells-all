@@ -1,7 +1,13 @@
 package searcher
 
 const (
-	PATH_ITEM_LOOK_UP = "/ttb/api/ItemLookUp.aspx"
+	PATH_ITEM_LOOK_UP   = "/ttb/api/ItemLookUp.aspx"
+	PATH_USED_ITEM_MALL = "/shop/UsedShop/wuseditemall.aspx"
+	TABTYPE_ALL         = 0
+	TABTYPE_USER        = 1
+	TABTYPE_ALADDIN     = 2
+	TABTYPE_SPACE       = 3
+	SORTORDER_LOW_PRICE = 9
 )
 
 type ItemLookUpResult struct {
@@ -37,5 +43,6 @@ type OneResult struct {
 }
 
 type Searcher interface {
-	GetByIsbn(isbn string) (OneResult, error)
+	GetByIsbn(isbn string) (*ItemLookUpResult, error)
+	CrawlProposals(itemInfo ItemLookUpResult) (*OneResult, error)
 }
