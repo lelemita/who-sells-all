@@ -9,17 +9,10 @@ import (
 func main() {
 	isbn := "9772799628000"
 	genie := searcher.NewSearcher()
-	itemLookUpResult, err := genie.GetByIsbn(isbn)
-	if err != nil {
-		panic(err)
-	}
+	itemId := genie.GetIdByIsbn(isbn)
+	books := genie.CrawlProposals(itemId)
 
-	proposals, err := genie.CrawlProposals(*itemLookUpResult)
-	if err != nil {
-		panic(err)
-	}
-
-	for k, v := range proposals.Proposals {
+	for k, v := range books {
 		fmt.Println(k, v)
 	}
 }

@@ -3,6 +3,7 @@ package mock
 import (
 	"fmt"
 	"net/http"
+	"sync"
 )
 
 const RESP_ITEMLOOKUP = `{
@@ -66,10 +67,12 @@ const RESP_ITEMLOOKUP = `{
 	]
 }`
 
-func RunAladdinApiMock() {
+func RunAladdinApiMock(wg *sync.WaitGroup) {
+	defer wg.Done()
 	srv := &http.Server{Addr: ":8081"}
 	http.HandleFunc("/ttb/api/ItemLookUp.aspx", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, RESP_ITEMLOOKUP)
 	})
-	srv.ListenAndServe()
+	go srv.ListenAndServe()
+	fmt.Println("aladinAPI mock server is running")
 }

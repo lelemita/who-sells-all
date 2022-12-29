@@ -3,24 +3,21 @@ package searcher
 const (
 	PATH_ITEM_LOOK_UP   = "/ttb/api/ItemLookUp.aspx"
 	PATH_USED_ITEM_MALL = "/shop/UsedShop/wuseditemall.aspx"
-	TABTYPE_ALL         = 0
-	TABTYPE_USER        = 1
-	TABTYPE_ALADDIN     = 2
-	TABTYPE_SPACE       = 3
-	SORTORDER_LOW_PRICE = 9
 )
 
+type ItemLookUpList struct {
+	Item []ItemLookUpResult `json:"item"`
+}
+
 type ItemLookUpResult struct {
-	Item []struct {
-		ItemId  uint `json:"itemId"`
-		SubInfo struct {
-			UsedList struct {
-				AladinUsed UsedInfo `json:"aladinUsed"`
-				UserUsed   UsedInfo `json:"userUsed"`
-				SpaceUsed  UsedInfo `json:"spaceUsed"`
-			} `json:"usedList"`
-		} `json:"subInfo"`
-	} `json:"item"`
+	ItemId  uint `json:"itemId"`
+	SubInfo struct {
+		UsedList struct {
+			AladinUsed UsedInfo `json:"aladinUsed"`
+			UserUsed   UsedInfo `json:"userUsed"`
+			SpaceUsed  UsedInfo `json:"spaceUsed"`
+		} `json:"usedList"`
+	} `json:"subInfo"`
 }
 
 type UsedInfo struct {
@@ -29,20 +26,24 @@ type UsedInfo struct {
 	Link      string `json:"link"`
 }
 
-type SellerId string
+type SellerName string
+type Bidding map[SellerName]Seller
 
-type Proposal struct {
-	Isbn   string
-	Price  int
+type Seller struct {
+	Link        string
+	DeliveryFee string
+	Proposal    []Book
+}
+
+type Book struct {
+	ItemId string
+	Price  string
 	Status string
 	Link   string
 }
 
-type OneResult struct {
-	Proposals map[SellerId]Proposal
-}
-
 type Searcher interface {
-	GetByIsbn(isbn string) (*ItemLookUpResult, error)
-	CrawlProposals(itemInfo ItemLookUpResult) (*OneResult, error)
+	FirstItemLookUp(isbn string) (*ItemLookUpResult, error)
+	GetIdByIsbn(isbn string) string
+	CrawlProposals(itemInfo ItemLookUpResult) Bidding
 }

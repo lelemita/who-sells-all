@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/lelemita/who_sells_all/mock"
@@ -14,7 +15,10 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	go mock.RunAladdinApiMock()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	mock.RunAladdinApiMock(&wg)
+	wg.Wait()
 	exitVal := m.Run()
 
 	os.Exit(exitVal)
