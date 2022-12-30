@@ -1,4 +1,4 @@
-package service
+package searcher
 
 import (
 	"encoding/json"
@@ -12,54 +12,89 @@ import (
 	"strconv"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/lelemita/who_sells_all/searcher"
+)
+
+const (
+	PATH_ITEM_LOOK_UP   = "/ttb/api/ItemLookUp.aspx"
+	PATH_USED_ITEM_MALL = "/shop/UsedShop/wuseditemall.aspx"
 )
 
 var regex_only_num = regexp.MustCompile("[^0-9]")
+
+type ItemLookUpList struct {
+	Item []ItemLookUpResult `json:"item"`
+}
+
+type ItemLookUpResult struct {
+	ItemId  uint `json:"itemId"`
+	SubInfo struct {
+		UsedList struct {
+			AladinUsed UsedInfo `json:"aladinUsed"`
+			UserUsed   UsedInfo `json:"userUsed"`
+			SpaceUsed  UsedInfo `json:"spaceUsed"`
+		} `json:"usedList"`
+	} `json:"subInfo"`
+}
+
+type UsedInfo struct {
+	ItemCount int    `json:"itemCount"`
+	MinPrice  int    `json:"minPrice"`
+	Link      string `json:"link"`
+}
+
+type SellerName string
+type Bidding map[SellerName]Seller
+
+type Seller struct {
+	Link        string
+	DeliveryFee string
+	Proposal    []Book
+}
+
+type Book struct {
+	ItemId string
+	Price  uint
+	Status string
+	Link   string
+}
 
 type Searcher struct {
 	apiHost string
 	ttbkey  string
 }
 
-func NewSearcher() Searcher {
+func NewSearcher(host string) Searcher {
 	ttbkey := os.Getenv("ttbkey")
 	return Searcher{
-		apiHost: "https://www.aladin.co.kr",
+		apiHost: host,
 		ttbkey:  ttbkey,
 	}
 }
 
-func (s *Searcher) firstItemLookUp(isbn string) (*searcher.ItemLookUpResult, error) {
-	url := s.apiHost + searcher.PATH_ITEM_LOOK_UP
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
+func (s *Searcher) GetProposals(isbns []string) Bidding {
+	sellers := Bidding{}
+	for _, isbn := range isbns {
+		itemId := s.getIdByIsbn(isbn)
+		proposals := s.crawlProposals(itemId)
+		for sName, s := range proposals {
+			if seller, isExist := sellers[sName]; isExist {
+				seller.Proposal = append(seller.Proposal, s.Proposal...)
+				sellers[sName] = seller
+			} else {
+				sellers[sName] = s
+			}
+		}
 	}
-	qry := req.URL.Query()
-	qry.Add("ttbkey", s.ttbkey)
-	qry.Add("itemId", isbn)
-	// qry.Add("itemIdType", "ISBN")
-	qry.Add("output", "js")
-	qry.Add("OptResult", "usedList")
-	qry.Add("version", "20131101")
-	req.URL.RawQuery = qry.Encode()
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	checkErr(err)
-	checkCode(resp)
-	defer resp.Body.Close()
-
-	respBytes, _ := io.ReadAll(resp.Body)
-	respInfo := &searcher.ItemLookUpList{}
-	if err := json.Unmarshal(respBytes, respInfo); err != nil {
-		return nil, err
+	// TODO 가격순 정렬 필요
+	// TODO 현재는 다 가진 셀러만 보여줌, 일부도 보여주려면 기준 필요, 가중치?
+	result := Bidding{}
+	for sName, seller := range sellers {
+		if len(seller.Proposal) >= len(isbns) {
+			result[sName] = seller
+		}
 	}
-	if len(respInfo.Item) == 0 {
-		return nil, errors.New("fail to find item")
-	}
-	return &respInfo.Item[0], nil
+	return result
 }
 
 func (s *Searcher) getIdByIsbn(isbn string) string {
@@ -69,10 +104,42 @@ func (s *Searcher) getIdByIsbn(isbn string) string {
 	return itemId
 }
 
-func (s *Searcher) crawlProposals(itemId string) searcher.Bidding {
+func (s *Searcher) firstItemLookUp(isbn string) (*ItemLookUpResult, error) {
+	url := s.apiHost + PATH_ITEM_LOOK_UP
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	qry := req.URL.Query()
+	qry.Add("ttbkey", s.ttbkey)
+	qry.Add("itemId", isbn)
+	qry.Add("output", "js")
+	qry.Add("OptResult", "usedList")
+	qry.Add("version", "20131101")
+	// qry.Add("itemIdType", "ISBN") // (default) 이걸로 해도 ISBN13 처리 가능, 반대는 안됨
+	req.URL.RawQuery = qry.Encode()
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	checkErr(err)
+	checkCode(resp)
+	defer resp.Body.Close()
+
+	respBytes, _ := io.ReadAll(resp.Body)
+	respInfo := &ItemLookUpList{}
+	if err := json.Unmarshal(respBytes, respInfo); err != nil {
+		return nil, err
+	}
+	if len(respInfo.Item) == 0 {
+		return nil, errors.New("fail to find item")
+	}
+	return &respInfo.Item[0], nil
+}
+
+func (s *Searcher) crawlProposals(itemId string) Bidding {
 	// TabType=0: 전체 목록 / SortOrder=9: 저가격순
-	baseUrl := fmt.Sprintf("%s%s?TabType=0&SortOrder=9&ItemId=%s", s.apiHost, searcher.PATH_USED_ITEM_MALL, itemId)
-	bidding := searcher.Bidding{}
+	baseUrl := fmt.Sprintf("%s%s?TabType=0&SortOrder=9&ItemId=%s", s.apiHost, PATH_USED_ITEM_MALL, itemId)
+	bidding := Bidding{}
 	totalPage := getPages(baseUrl)
 	for page := 1; page <= totalPage; page++ {
 		pageUrl := baseUrl + "&page=" + strconv.Itoa(page)
@@ -89,16 +156,16 @@ func (s *Searcher) crawlProposals(itemId string) searcher.Bidding {
 			if i == 0 {
 				return
 			}
-			var sName searcher.SellerName
-			seller := searcher.Seller{}
-			book := searcher.Book{ItemId: itemId}
+			var sName SellerName
+			seller := Seller{}
+			book := Book{ItemId: itemId}
 			s.Find("td").Each(func(j int, ss *goquery.Selection) {
 				tdTag := ss.Find("div")
 				if tdTag.HasClass("seller") {
 					aTag := tdTag.Find("ul > li > a")
 					sLink, _ := aTag.Attr("href")
 					seller.Link = sLink
-					sName = searcher.SellerName(aTag.Text())
+					sName = SellerName(aTag.Text())
 				} else if tdTag.HasClass("price") {
 					strPrice := tdTag.Find("ul > li:nth-child(1)").Text()
 					book.Price = parsePrice(strPrice)
@@ -115,36 +182,12 @@ func (s *Searcher) crawlProposals(itemId string) searcher.Bidding {
 			if s, isExist := bidding[sName]; isExist {
 				s.Proposal = append(s.Proposal, book)
 			} else {
-				seller.Proposal = []searcher.Book{book}
+				seller.Proposal = []Book{book}
 				bidding[sName] = seller
 			}
 		})
 	}
 	return bidding
-}
-
-func (s *Searcher) GetProposals(isbns []string) searcher.Bidding {
-	sellers := searcher.Bidding{}
-	for _, isbn := range isbns {
-		itemId := s.getIdByIsbn(isbn)
-		proposals := s.crawlProposals(itemId)
-		for sName, s := range proposals {
-			if seller, isExist := sellers[sName]; isExist {
-				seller.Proposal = append(seller.Proposal, s.Proposal...)
-				sellers[sName] = seller
-			} else {
-				sellers[sName] = s
-			}
-		}
-	}
-
-	result := searcher.Bidding{}
-	for sName, seller := range sellers {
-		if len(seller.Proposal) >= len(isbns) {
-			result[sName] = seller
-		}
-	}
-	return result
 }
 
 func getPages(url string) int {

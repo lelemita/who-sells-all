@@ -3,11 +3,11 @@ package main
 import (
 	"fmt"
 
-	searcher "github.com/lelemita/who_sells_all/searcher/aladin"
+	"github.com/lelemita/who_sells_all/searcher"
 )
 
 func main() {
-	genie := searcher.NewSearcher()
+	genie := searcher.NewSearcher("https://www.aladin.co.kr")
 	isbns := []string{"9791164136452", "9788970128856"}
 	proposals := genie.GetProposals(isbns)
 
