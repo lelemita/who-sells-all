@@ -8,11 +8,14 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/lelemita/who_sells_all/searcher"
 )
+
+var regex_only_num = regexp.MustCompile("[^0-9]")
 
 type Searcher struct {
 	apiHost string
@@ -27,7 +30,7 @@ func NewSearcher() Searcher {
 	}
 }
 
-func (s *Searcher) FirstItemLookUp(isbn string) (*searcher.ItemLookUpResult, error) {
+func (s *Searcher) firstItemLookUp(isbn string) (*searcher.ItemLookUpResult, error) {
 	url := s.apiHost + searcher.PATH_ITEM_LOOK_UP
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -59,14 +62,14 @@ func (s *Searcher) FirstItemLookUp(isbn string) (*searcher.ItemLookUpResult, err
 	return &respInfo.Item[0], nil
 }
 
-func (s *Searcher) GetIdByIsbn(isbn string) string {
-	itemInfo, err := s.FirstItemLookUp(isbn)
+func (s *Searcher) getIdByIsbn(isbn string) string {
+	itemInfo, err := s.firstItemLookUp(isbn)
 	checkErr(err)
 	itemId := strconv.Itoa(int(itemInfo.ItemId))
 	return itemId
 }
 
-func (s *Searcher) CrawlProposals(itemId string) searcher.Bidding {
+func (s *Searcher) crawlProposals(itemId string) searcher.Bidding {
 	// TabType=0: 전체 목록 / SortOrder=9: 저가격순
 	baseUrl := fmt.Sprintf("%s%s?TabType=0&SortOrder=9&ItemId=%s", s.apiHost, searcher.PATH_USED_ITEM_MALL, itemId)
 	bidding := searcher.Bidding{}
@@ -97,7 +100,8 @@ func (s *Searcher) CrawlProposals(itemId string) searcher.Bidding {
 					seller.Link = sLink
 					sName = searcher.SellerName(aTag.Text())
 				} else if tdTag.HasClass("price") {
-					book.Price = tdTag.Find("ul > li:nth-child(1)").Text()
+					strPrice := tdTag.Find("ul > li:nth-child(1)").Text()
+					book.Price = parsePrice(strPrice)
 					seller.DeliveryFee = tdTag.Find("ul > li:nth-child(3)").Text()
 				} else if tdTag.HasClass("info") {
 					link, _ := tdTag.Find("ul > li:first-child > a").Attr("href")
@@ -119,6 +123,30 @@ func (s *Searcher) CrawlProposals(itemId string) searcher.Bidding {
 	return bidding
 }
 
+func (s *Searcher) GetProposals(isbns []string) searcher.Bidding {
+	sellers := searcher.Bidding{}
+	for _, isbn := range isbns {
+		itemId := s.getIdByIsbn(isbn)
+		proposals := s.crawlProposals(itemId)
+		for sName, s := range proposals {
+			if seller, isExist := sellers[sName]; isExist {
+				seller.Proposal = append(seller.Proposal, s.Proposal...)
+				sellers[sName] = seller
+			} else {
+				sellers[sName] = s
+			}
+		}
+	}
+
+	result := searcher.Bidding{}
+	for sName, seller := range sellers {
+		if len(seller.Proposal) >= len(isbns) {
+			result[sName] = seller
+		}
+	}
+	return result
+}
+
 func getPages(url string) int {
 	resp, err := http.Get(url)
 	checkErr(err)
@@ -129,6 +157,13 @@ func getPages(url string) int {
 	checkErr(err)
 	pageNum := doc.Find(".Ere_usedsell_num_box > div > div > ul > li").Length()
 	return pageNum
+}
+
+func parsePrice(strPrice string) uint {
+	price := regex_only_num.ReplaceAllString(strPrice, "")
+	result, err := strconv.ParseUint(price, 0, 64)
+	checkErr(err)
+	return uint(result)
 }
 
 func checkCode(resp *http.Response) {

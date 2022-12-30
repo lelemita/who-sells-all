@@ -8,17 +8,16 @@ import (
 
 func main() {
 	genie := searcher.NewSearcher()
-	// 8970127240
-	isbn := "9772799628000"
-	itemId := genie.GetIdByIsbn(isbn)
-	books := genie.CrawlProposals(itemId)
+	isbns := []string{"9791164136452", "9788970128856"}
+	proposals := genie.GetProposals(isbns)
 
-	for k, v := range books {
-		fmt.Println(k, v)
+	fmt.Println("total seller: ", len(proposals))
+	for sName, seller := range proposals {
+		var totalPrice uint
+		for _, book := range seller.Proposal {
+			totalPrice += book.Price
+		}
+		fmt.Printf("%s: %d (%s)\n", sName, totalPrice, seller.DeliveryFee)
 	}
 
 }
-
-// func getProposals(isbn string) *searcher.Bidding {
-
-// }

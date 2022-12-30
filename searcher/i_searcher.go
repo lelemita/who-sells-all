@@ -37,13 +37,11 @@ type Seller struct {
 
 type Book struct {
 	ItemId string
-	Price  string
+	Price  uint
 	Status string
 	Link   string
 }
 
 type Searcher interface {
-	FirstItemLookUp(isbn string) (*ItemLookUpResult, error)
-	GetIdByIsbn(isbn string) string
-	CrawlProposals(itemInfo ItemLookUpResult) Bidding
+	GetProposals(isbns []string) Bidding
 }
