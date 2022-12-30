@@ -13,7 +13,7 @@ import (
 func TestMain(m *testing.M) {
 	var wg sync.WaitGroup
 	wg.Add(1)
-	mock.RunAladdinApiMock(&wg)
+	mock.RunAladinApiMock(&wg)
 	wg.Wait()
 	exitVal := m.Run()
 	os.Exit(exitVal)

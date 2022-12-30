@@ -1,4 +1,4 @@
-# [Aladdin](https://www.aladin.co.kr) 중고 서적 검색기
+# [Aladin](https://www.aladin.co.kr) 중고 서적 검색기
 
 ## 목적
 

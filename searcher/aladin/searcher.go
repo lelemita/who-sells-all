@@ -36,7 +36,7 @@ func (s *Searcher) FirstItemLookUp(isbn string) (*searcher.ItemLookUpResult, err
 	qry := req.URL.Query()
 	qry.Add("ttbkey", s.ttbkey)
 	qry.Add("itemId", isbn)
-	qry.Add("itemIdType", "ISBN13")
+	// qry.Add("itemIdType", "ISBN")
 	qry.Add("output", "js")
 	qry.Add("OptResult", "usedList")
 	qry.Add("version", "20131101")

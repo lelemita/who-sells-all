@@ -67,7 +67,7 @@ const RESP_ITEMLOOKUP = `{
 	]
 }`
 
-func RunAladdinApiMock(wg *sync.WaitGroup) {
+func RunAladinApiMock(wg *sync.WaitGroup) {
 	defer wg.Done()
 	srv := &http.Server{Addr: ":8081"}
 	http.HandleFunc("/ttb/api/ItemLookUp.aspx", func(w http.ResponseWriter, r *http.Request) {
