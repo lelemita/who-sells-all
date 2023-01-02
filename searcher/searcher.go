@@ -139,7 +139,7 @@ func (s *Searcher) firstItemLookUp(isbn string) (*ItemLookUpResult, error) {
 func (s *Searcher) crawlProposals(itemId string) Bidding {
 	// TabType=0: 전체 목록 / SortOrder=9: 저가격순
 	baseUrl := fmt.Sprintf("%s%s?TabType=0&SortOrder=9&ItemId=%s", s.apiHost, PATH_USED_ITEM_MALL, itemId)
-	bidding := Bidding{}
+	totalBidding := Bidding{}
 	totalPage := getPages(baseUrl)
 	for page := 1; page <= totalPage; page++ {
 		pageUrl := baseUrl + "&page=" + strconv.Itoa(page)
@@ -152,42 +152,58 @@ func (s *Searcher) crawlProposals(itemId string) Bidding {
 
 		doc, err := goquery.NewDocumentFromReader(resp.Body)
 		checkErr(err)
-		doc.Find(".Ere_usedsell_table > table > tbody > tr").Each(func(i int, s *goquery.Selection) {
+		trTag := doc.Find(".Ere_usedsell_table > table > tbody > tr")
+		ch := make(chan Bidding)
+		trTag.Each(func(i int, tr *goquery.Selection) {
 			if i == 0 {
 				return
 			}
-			var sName SellerName
-			seller := Seller{}
-			book := Book{ItemId: itemId}
-			s.Find("td").Each(func(j int, ss *goquery.Selection) {
-				tdTag := ss.Find("div")
-				if tdTag.HasClass("seller") {
-					aTag := tdTag.Find("ul > li > a")
-					sLink, _ := aTag.Attr("href")
-					seller.Link = sLink
-					sName = SellerName(aTag.Text())
-				} else if tdTag.HasClass("price") {
-					strPrice := tdTag.Find("ul > li:nth-child(1)").Text()
-					book.Price = parsePrice(strPrice)
-					seller.DeliveryFee = tdTag.Find("ul > li:nth-child(3)").Text()
-				} else if tdTag.HasClass("info") {
-					link, _ := tdTag.Find("ul > li:first-child > a").Attr("href")
-					book.Link = link
-				} else {
-					ss.Find("span > span").Each(func(k int, sss *goquery.Selection) {
-						book.Status = sss.Text()
-					})
-				}
-			})
-			if s, isExist := bidding[sName]; isExist {
-				s.Proposal = append(s.Proposal, book)
-			} else {
-				seller.Proposal = []Book{book}
-				bidding[sName] = seller
-			}
+			go extractBidding(itemId, tr, ch)
 		})
+
+		for i := 0; i < trTag.Length()-1; i++ {
+			bidding := <-ch
+			for sName, seller := range bidding {
+				if s, isExist := totalBidding[sName]; isExist {
+					s.Proposal = append(s.Proposal, seller.Proposal...)
+				} else {
+					totalBidding[sName] = seller
+				}
+			}
+		}
 	}
-	return bidding
+	return totalBidding
+}
+
+func extractBidding(itemId string, tr *goquery.Selection, ch chan<- Bidding) {
+	var sName SellerName
+	seller := Seller{}
+	book := Book{ItemId: itemId}
+	tr.Find("td").Each(func(j int, td *goquery.Selection) {
+		tdTag := td.Find("div")
+		if tdTag.HasClass("seller") {
+			aTag := tdTag.Find("ul > li > a")
+			sLink, _ := aTag.Attr("href")
+			seller.Link = sLink
+			sName = SellerName(aTag.Text())
+		} else if tdTag.HasClass("price") {
+			strPrice := tdTag.Find("ul > li:nth-child(1)").Text()
+			book.Price = parsePrice(strPrice)
+			seller.DeliveryFee = tdTag.Find("ul > li:nth-child(3)").Text()
+		} else if tdTag.HasClass("info") {
+			link, _ := tdTag.Find("ul > li:first-child > a").Attr("href")
+			book.Link = link
+		} else {
+			td.Find("span > span").Each(func(k int, sss *goquery.Selection) {
+				book.Status = sss.Text()
+			})
+		}
+	})
+
+	seller.Proposal = []Book{book}
+	ch <- Bidding{
+		sName: seller,
+	}
 }
 
 func getPages(url string) int {
