@@ -141,41 +141,58 @@ func (s *Searcher) crawlProposals(itemId string) Bidding {
 	baseUrl := fmt.Sprintf("%s%s?TabType=0&SortOrder=9&ItemId=%s", s.apiHost, PATH_USED_ITEM_MALL, itemId)
 	totalBidding := Bidding{}
 	totalPage := getPages(baseUrl)
+	chPage := make(chan Bidding)
 	for page := 1; page <= totalPage; page++ {
-		pageUrl := baseUrl + "&page=" + strconv.Itoa(page)
-		log.Println("Requesting... ", pageUrl)
-
-		resp, err := http.Get(pageUrl)
-		checkErr(err)
-		checkCode(resp)
-		defer resp.Body.Close()
-
-		doc, err := goquery.NewDocumentFromReader(resp.Body)
-		checkErr(err)
-		trTag := doc.Find(".Ere_usedsell_table > table > tbody > tr")
-		ch := make(chan Bidding)
-		trTag.Each(func(i int, tr *goquery.Selection) {
-			if i == 0 {
-				return
-			}
-			go extractBidding(itemId, tr, ch)
-		})
-
-		for i := 0; i < trTag.Length()-1; i++ {
-			bidding := <-ch
-			for sName, seller := range bidding {
-				if s, isExist := totalBidding[sName]; isExist {
-					s.Proposal = append(s.Proposal, seller.Proposal...)
-				} else {
-					totalBidding[sName] = seller
-				}
+		go s.extractFromPage(itemId, page, chPage)
+	}
+	for page := 1; page <= totalPage; page++ {
+		bidding := <-chPage
+		for sName, seller := range bidding {
+			if s, isExist := totalBidding[sName]; isExist {
+				s.Proposal = append(s.Proposal, seller.Proposal...)
+			} else {
+				totalBidding[sName] = seller
 			}
 		}
 	}
 	return totalBidding
 }
 
-func extractBidding(itemId string, tr *goquery.Selection, ch chan<- Bidding) {
+func (s *Searcher) extractFromPage(itemId string, page int, chPage chan<- Bidding) {
+	pageUrl := fmt.Sprintf("%s%s?TabType=0&SortOrder=9&ItemId=%s&page=%d", s.apiHost, PATH_USED_ITEM_MALL, itemId, page)
+	pageBidding := Bidding{}
+	chTr := make(chan Bidding)
+
+	log.Println("Requesting... ", pageUrl)
+	resp, err := http.Get(pageUrl)
+	checkErr(err)
+	checkCode(resp)
+	defer resp.Body.Close()
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	checkErr(err)
+	trTag := doc.Find(".Ere_usedsell_table > table > tbody > tr")
+	trTag.Each(func(i int, tr *goquery.Selection) {
+		if i == 0 {
+			return
+		}
+		go extractFromTr(itemId, tr, chTr)
+	})
+
+	for i := 0; i < trTag.Length()-1; i++ {
+		bidding := <-chTr
+		for sName, seller := range bidding {
+			if s, isExist := pageBidding[sName]; isExist {
+				s.Proposal = append(s.Proposal, seller.Proposal...)
+			} else {
+				pageBidding[sName] = seller
+			}
+		}
+	}
+	chPage <- pageBidding
+}
+
+func extractFromTr(itemId string, tr *goquery.Selection, ch chan<- Bidding) {
 	var sName SellerName
 	seller := Seller{}
 	book := Book{ItemId: itemId}
