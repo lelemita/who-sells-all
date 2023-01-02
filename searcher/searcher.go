@@ -73,9 +73,13 @@ func NewSearcher(host string) Searcher {
 
 func (s *Searcher) GetProposals(isbns []string) Bidding {
 	sellers := Bidding{}
+	chIsbn := make(chan Bidding)
 	for _, isbn := range isbns {
-		itemId := s.getIdByIsbn(isbn)
-		proposals := s.crawlProposals(itemId)
+		go s.crawlProposals(isbn, chIsbn)
+	}
+
+	for i := 0; i < len(isbns); i++ {
+		proposals := <-chIsbn
 		for sName, s := range proposals {
 			if seller, isExist := sellers[sName]; isExist {
 				seller.Proposal = append(seller.Proposal, s.Proposal...)
@@ -136,7 +140,8 @@ func (s *Searcher) firstItemLookUp(isbn string) (*ItemLookUpResult, error) {
 	return &respInfo.Item[0], nil
 }
 
-func (s *Searcher) crawlProposals(itemId string) Bidding {
+func (s *Searcher) crawlProposals(isbn string, chIsbn chan<- Bidding) {
+	itemId := s.getIdByIsbn(isbn)
 	// TabType=0: 전체 목록 / SortOrder=9: 저가격순
 	baseUrl := fmt.Sprintf("%s%s?TabType=0&SortOrder=9&ItemId=%s", s.apiHost, PATH_USED_ITEM_MALL, itemId)
 	totalBidding := Bidding{}
@@ -155,7 +160,7 @@ func (s *Searcher) crawlProposals(itemId string) Bidding {
 			}
 		}
 	}
-	return totalBidding
+	chIsbn <- totalBidding
 }
 
 func (s *Searcher) extractFromPage(itemId string, page int, chPage chan<- Bidding) {
