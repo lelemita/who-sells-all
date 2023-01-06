@@ -93,13 +93,14 @@ func NewSearcher(host string) Searcher {
 	}
 }
 
+// Scrape Aladin used bookstore by isbn list
 func (s *Searcher) GetOrderedList(isbns []string) ShopList {
 	output := ShopList{}
 	proposals := s.getProposals(isbns)
 	for sName, seller := range proposals {
 		shop := Shop{
 			Name:        sName,
-			Link:        seller.Link,
+			Link:        s.apiHost + seller.Link,
 			DeliveryFee: seller.DeliveryFee,
 		}
 		for _, book := range seller.Proposal {
@@ -161,7 +162,7 @@ func (s *Searcher) firstItemLookUp(isbn string) (*ItemLookUpResult, error) {
 	qry.Add("output", "js")
 	qry.Add("OptResult", "usedList")
 	qry.Add("version", "20131101")
-	// qry.Add("itemIdType", "ISBN") // (default) 이걸로 해도 ISBN13 처리 가능, 반대는 안됨
+	// 참고: qry.Add("itemIdType", "ISBN") // (default) 이걸로 해도 ISBN13 처리 가능, 반대는 안됨
 	req.URL.RawQuery = qry.Encode()
 
 	client := &http.Client{}
@@ -209,7 +210,8 @@ func (s *Searcher) extractFromPage(itemId string, page int, chPage chan<- Biddin
 	pageBidding := Bidding{}
 	chTr := make(chan Bidding)
 
-	log.Println("Requesting... ", pageUrl)
+	// TODO 로거 만들어서 develop 모드에서는 출력하자
+	// log.Println("Requesting... ", pageUrl)
 	resp, err := http.Get(pageUrl)
 	checkErr(err)
 	checkCode(resp)
