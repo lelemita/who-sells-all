@@ -10,8 +10,8 @@
 
 ## 사용예시
 
-- 요청: localhost:8080/proposals?isbn={첫번째책ISBN}&isbn={두번째책ISBN}&...&isbn={n번째책ISBN}
-- 응답예시
+- GET 요청: localhost:8080/v1/proposals?isbn={첫번째책ISBN}&isbn={두번째책ISBN}&...&isbn={n번째책ISBN}
+- 응답 예시
 
   ```json
   {

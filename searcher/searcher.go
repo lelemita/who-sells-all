@@ -281,6 +281,9 @@ func getPages(url string) int {
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	checkErr(err)
 	pageNum := doc.Find(".Ere_usedsell_num_box > div > div > ul > li").Length()
+	if pageNum == 0 {
+		pageNum = 1
+	}
 	return pageNum
 }
 

@@ -11,11 +11,12 @@ import (
 )
 
 // TODO write test code
+// // 1페이지 결과, 여러페이지 결과, 없는 결과
 func main() {
 	// TODO ttbkey 있는지 확인하고 없으면 exit
 	genie := searcher.NewSearcher("https://www.aladin.co.kr")
 
-	http.HandleFunc("/proposals", func(w http.ResponseWriter, req *http.Request) {
+	http.HandleFunc("/v1/proposals", func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Add("Content-Type", "application/json; charset=utf-8")
 		qry, err := url.ParseQuery(req.URL.RawQuery)
 		if err != nil {
