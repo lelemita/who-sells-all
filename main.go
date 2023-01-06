@@ -12,6 +12,7 @@ import (
 
 // TODO write test code
 func main() {
+	// TODO ttbkey 있는지 확인하고 없으면 exit
 	genie := searcher.NewSearcher("https://www.aladin.co.kr")
 
 	http.HandleFunc("/proposals", func(w http.ResponseWriter, req *http.Request) {

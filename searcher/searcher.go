@@ -44,6 +44,7 @@ type UsedInfo struct {
 }
 
 type SellerName string
+
 type Bidding map[SellerName]Seller
 
 type Seller struct {
