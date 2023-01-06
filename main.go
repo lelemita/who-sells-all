@@ -30,7 +30,7 @@ func main() {
 			return
 		}
 		output := genie.GetOrderedList(isbns)
-		jsonByte, err := json.Marshal(output)
+		jsonByte, err := json.Marshal(map[string]searcher.ShopList{"result": output})
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			fmt.Fprintf(w, `{"message": "error in json.Marshal"}`)
