@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 
 	"github.com/PuerkitoBio/goquery"
@@ -58,6 +59,27 @@ type Book struct {
 	Link   string
 }
 
+type Shop struct {
+	Name        SellerName `json:"name"`
+	Link        string     `json:"link"`
+	TotalPrice  uint       `json:"totalPrice"`
+	DeliveryFee string     `json:"deliveryFee"`
+}
+
+type ShopList []Shop
+
+func (s ShopList) Len() int {
+	return len(s)
+}
+
+func (s ShopList) Less(i, j int) bool {
+	return s[i].TotalPrice < s[j].TotalPrice
+}
+
+func (s ShopList) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
 type Searcher struct {
 	apiHost string
 	ttbkey  string
@@ -71,7 +93,27 @@ func NewSearcher(host string) Searcher {
 	}
 }
 
-func (s *Searcher) GetProposals(isbns []string) Bidding {
+func (s *Searcher) GetOrderedList(isbns []string) ShopList {
+	output := ShopList{}
+	proposals := s.getProposals(isbns)
+	for sName, seller := range proposals {
+		shop := Shop{
+			Name:        sName,
+			Link:        seller.Link,
+			DeliveryFee: seller.DeliveryFee,
+		}
+		for _, book := range seller.Proposal {
+			shop.TotalPrice += book.Price
+		}
+		// Think 배송비 반영 해야 하려나? 얼마이상 무료배송 이런거 까지 고려해야 할지도..
+		output = append(output, shop)
+	}
+
+	sort.Sort(output)
+	return output
+}
+
+func (s *Searcher) getProposals(isbns []string) Bidding {
 	sellers := Bidding{}
 	chIsbn := make(chan Bidding)
 	for _, isbn := range isbns {
@@ -90,7 +132,6 @@ func (s *Searcher) GetProposals(isbns []string) Bidding {
 		}
 	}
 
-	// TODO 가격순 정렬 필요
 	// TODO 현재는 다 가진 셀러만 보여줌, 일부도 보여주려면 기준 필요, 가중치?
 	result := Bidding{}
 	for sName, seller := range sellers {
