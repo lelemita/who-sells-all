@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"regexp"
@@ -86,8 +85,7 @@ type Searcher struct {
 	ttbkey  string
 }
 
-func NewSearcher(host string) Searcher {
-	ttbkey := os.Getenv("ttbkey")
+func NewSearcher(host string, ttbkey string) Searcher {
 	return Searcher{
 		apiHost: host,
 		ttbkey:  ttbkey,
@@ -144,11 +142,13 @@ func (s *Searcher) getProposals(isbns []string) Bidding {
 	return result
 }
 
-func (s *Searcher) getIdByIsbn(isbn string) string {
-	itemInfo, err := s.firstItemLookUp(isbn)
-	checkErr(err)
-	itemId := strconv.Itoa(int(itemInfo.ItemId))
-	return itemId
+func (s *Searcher) getIdByIsbn(isbn string) (string, error) {
+	if itemInfo, err := s.firstItemLookUp(isbn); err != nil {
+		return "", err
+	} else {
+		itemId := strconv.Itoa(int(itemInfo.ItemId))
+		return itemId, nil
+	}
 }
 
 func (s *Searcher) firstItemLookUp(isbn string) (*ItemLookUpResult, error) {
@@ -183,11 +183,16 @@ func (s *Searcher) firstItemLookUp(isbn string) (*ItemLookUpResult, error) {
 	return &respInfo.Item[0], nil
 }
 
+// TODO 좀 더 정리하자 getIdByIsbn 도 같이..
 func (s *Searcher) crawlProposals(isbn string, chIsbn chan<- Bidding) {
-	itemId := s.getIdByIsbn(isbn)
+	totalBidding := Bidding{}
+	itemId, err := s.getIdByIsbn(isbn)
+	if err != nil {
+		chIsbn <- totalBidding
+		return
+	}
 	// TabType=0: 전체 목록 / SortOrder=9: 저가격순
 	baseUrl := fmt.Sprintf("%s%s?TabType=0&SortOrder=9&ItemId=%s", s.apiHost, PATH_USED_ITEM_MALL, itemId)
-	totalBidding := Bidding{}
 	totalPage := getPages(baseUrl)
 	chPage := make(chan Bidding)
 	for page := 1; page <= totalPage; page++ {
@@ -297,12 +302,13 @@ func parsePrice(strPrice string) uint {
 func checkCode(resp *http.Response) {
 	if resp.StatusCode != http.StatusOK {
 		// TODO 에러 타입 정의 필요
-		log.Fatalf("Request failed with Status: %d", resp.StatusCode)
+		fmt.Fprintf(os.Stderr, "Request failed with Status: %d", resp.StatusCode)
 	}
 }
 
+// TODO goroutine 내에서의 에러와 recover 어떻게 처리할지 생각해보기
 func checkErr(err error) {
 	if err != nil {
-		log.Fatalln(err)
+		fmt.Fprintln(os.Stderr, err)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 
 	"github.com/lelemita/who_sells_all/searcher"
 )
@@ -14,7 +15,11 @@ import (
 // // 1페이지 결과, 여러페이지 결과, 없는 결과
 func main() {
 	// TODO ttbkey 있는지 확인하고 없으면 exit
-	genie := searcher.NewSearcher("https://www.aladin.co.kr")
+	ttbkey := os.Getenv("ttbkey")
+	if len(ttbkey) == 0 {
+		log.Fatal("ttbkey value is required")
+	}
+	genie := searcher.NewSearcher("https://www.aladin.co.kr", ttbkey)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -22,6 +27,16 @@ func main() {
 	})
 
 	http.HandleFunc("/v1/proposals", func(w http.ResponseWriter, req *http.Request) {
+		// TODO recover 대책이 필요하지 않나... 이걸로 되나... 점검 필요..
+		// TODO os.Stderr 도 더 알아보기
+		defer func() {
+			if err := recover(); err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprintf(w, `{"message": "error in process"}`)
+				fmt.Fprintln(os.Stderr, err)
+			}
+		}()
+
 		w.Header().Add("Content-Type", "application/json; charset=utf-8")
 		qry, err := url.ParseQuery(req.URL.RawQuery)
 		if err != nil {
