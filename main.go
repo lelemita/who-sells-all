@@ -16,6 +16,11 @@ func main() {
 	// TODO ttbkey 있는지 확인하고 없으면 exit
 	genie := searcher.NewSearcher("https://www.aladin.co.kr")
 
+	http.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, `{"message": "hello"}`)
+	})
+
 	http.HandleFunc("/v1/proposals", func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Add("Content-Type", "application/json; charset=utf-8")
 		qry, err := url.ParseQuery(req.URL.RawQuery)
