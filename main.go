@@ -23,7 +23,7 @@ func main() {
 
 	http.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"message": "hello"}`)
+		fmt.Fprintf(w, `{"message": "hello 2023 0111"}`)
 	})
 
 	http.HandleFunc("/v1/proposals", func(w http.ResponseWriter, req *http.Request) {
