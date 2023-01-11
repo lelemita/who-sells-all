@@ -44,12 +44,12 @@ type UsedInfo struct {
 
 type SellerName string
 
-type Bidding map[SellerName]Seller
+type Proposals map[SellerName]Seller
 
 type Seller struct {
 	Link        string
 	DeliveryFee string
-	Proposal    []Book
+	Books       []Book
 }
 
 type Book struct {
@@ -102,7 +102,7 @@ func (s *Searcher) GetOrderedList(isbns []string) ShopList {
 			Link:        s.apiHost + seller.Link,
 			DeliveryFee: seller.DeliveryFee,
 		}
-		for _, book := range seller.Proposal {
+		for _, book := range seller.Books {
 			shop.TotalPrice += book.Price
 		}
 		// Think 배송비 반영 해야 하려나? 얼마이상 무료배송 이런거 까지 고려해야 할지도..
@@ -113,18 +113,18 @@ func (s *Searcher) GetOrderedList(isbns []string) ShopList {
 	return output
 }
 
-func (s *Searcher) getProposals(isbns []string) Bidding {
-	sellers := Bidding{}
-	chIsbn := make(chan Bidding)
+func (s *Searcher) getProposals(isbns []string) Proposals {
+	sellers := Proposals{}
+	chIsbn := make(chan Proposals)
 	for _, isbn := range isbns {
-		go s.crawlProposals(isbn, chIsbn)
+		go s.getForOneIsbn(isbn, chIsbn)
 	}
 
 	for i := 0; i < len(isbns); i++ {
 		proposals := <-chIsbn
 		for sName, s := range proposals {
 			if seller, isExist := sellers[sName]; isExist {
-				seller.Proposal = append(seller.Proposal, s.Proposal...)
+				seller.Books = append(seller.Books, s.Books...)
 				sellers[sName] = seller
 			} else {
 				sellers[sName] = s
@@ -133,17 +133,17 @@ func (s *Searcher) getProposals(isbns []string) Bidding {
 	}
 
 	// TODO 현재는 다 가진 셀러만 보여줌, 일부도 보여주려면 기준 필요, 가중치?
-	result := Bidding{}
+	result := Proposals{}
 	for sName, seller := range sellers {
-		if len(seller.Proposal) >= len(isbns) {
+		if len(seller.Books) >= len(isbns) {
 			result[sName] = seller
 		}
 	}
 	return result
 }
 
-func (s *Searcher) getIdByIsbn(isbn string) (string, error) {
-	if itemInfo, err := s.firstItemLookUp(isbn); err != nil {
+func (s *Searcher) getItemIdByIsbn(isbn string) (string, error) {
+	if itemInfo, err := s.getAladinInfo(isbn); err != nil {
 		return "", err
 	} else {
 		itemId := strconv.Itoa(int(itemInfo.ItemId))
@@ -151,7 +151,7 @@ func (s *Searcher) getIdByIsbn(isbn string) (string, error) {
 	}
 }
 
-func (s *Searcher) firstItemLookUp(isbn string) (*ItemLookUpResult, error) {
+func (s *Searcher) getAladinInfo(isbn string) (*ItemLookUpResult, error) {
 	url := s.apiHost + PATH_ITEM_LOOK_UP
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -184,37 +184,37 @@ func (s *Searcher) firstItemLookUp(isbn string) (*ItemLookUpResult, error) {
 }
 
 // TODO 좀 더 정리하자 getIdByIsbn 도 같이..
-func (s *Searcher) crawlProposals(isbn string, chIsbn chan<- Bidding) {
-	totalBidding := Bidding{}
-	itemId, err := s.getIdByIsbn(isbn)
+func (s *Searcher) getForOneIsbn(isbn string, chIsbn chan<- Proposals) {
+	totalResult := Proposals{}
+	itemId, err := s.getItemIdByIsbn(isbn)
 	if err != nil {
-		chIsbn <- totalBidding
+		chIsbn <- totalResult
 		return
 	}
 	// TabType=0: 전체 목록 / SortOrder=9: 저가격순
 	baseUrl := fmt.Sprintf("%s%s?TabType=0&SortOrder=9&ItemId=%s", s.apiHost, PATH_USED_ITEM_MALL, itemId)
 	totalPage := getPages(baseUrl)
-	chPage := make(chan Bidding)
+	chPage := make(chan Proposals)
 	for page := 1; page <= totalPage; page++ {
 		go s.extractFromPage(itemId, page, chPage)
 	}
 	for page := 1; page <= totalPage; page++ {
-		bidding := <-chPage
-		for sName, seller := range bidding {
-			if s, isExist := totalBidding[sName]; isExist {
-				s.Proposal = append(s.Proposal, seller.Proposal...)
+		pageResult := <-chPage
+		for sName, seller := range pageResult {
+			if s, isExist := totalResult[sName]; isExist {
+				s.Books = append(s.Books, seller.Books...)
 			} else {
-				totalBidding[sName] = seller
+				totalResult[sName] = seller
 			}
 		}
 	}
-	chIsbn <- totalBidding
+	chIsbn <- totalResult
 }
 
-func (s *Searcher) extractFromPage(itemId string, page int, chPage chan<- Bidding) {
+func (s *Searcher) extractFromPage(itemId string, page int, chPage chan<- Proposals) {
 	pageUrl := fmt.Sprintf("%s%s?TabType=0&SortOrder=9&ItemId=%s&page=%d", s.apiHost, PATH_USED_ITEM_MALL, itemId, page)
-	pageBidding := Bidding{}
-	chTr := make(chan Bidding)
+	pageResult := Proposals{}
+	chTr := make(chan Proposals)
 
 	// TODO 로거 만들어서 develop 모드에서는 출력하자
 	// log.Println("Requesting... ", pageUrl)
@@ -234,19 +234,19 @@ func (s *Searcher) extractFromPage(itemId string, page int, chPage chan<- Biddin
 	})
 
 	for i := 0; i < trTag.Length()-1; i++ {
-		bidding := <-chTr
-		for sName, seller := range bidding {
-			if s, isExist := pageBidding[sName]; isExist {
-				s.Proposal = append(s.Proposal, seller.Proposal...)
+		trResult := <-chTr
+		for sName, seller := range trResult {
+			if s, isExist := pageResult[sName]; isExist {
+				s.Books = append(s.Books, seller.Books...)
 			} else {
-				pageBidding[sName] = seller
+				pageResult[sName] = seller
 			}
 		}
 	}
-	chPage <- pageBidding
+	chPage <- pageResult
 }
 
-func extractFromTr(itemId string, tr *goquery.Selection, ch chan<- Bidding) {
+func extractFromTr(itemId string, tr *goquery.Selection, ch chan<- Proposals) {
 	var sName SellerName
 	seller := Seller{}
 	book := Book{ItemId: itemId}
@@ -271,8 +271,8 @@ func extractFromTr(itemId string, tr *goquery.Selection, ch chan<- Bidding) {
 		}
 	})
 
-	seller.Proposal = []Book{book}
-	ch <- Bidding{
+	seller.Books = []Book{book}
+	ch <- Proposals{
 		sName: seller,
 	}
 }
