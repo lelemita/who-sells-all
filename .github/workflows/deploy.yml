@@ -24,7 +24,9 @@ jobs:
             app: golang@1.17
             options:
               ports: 8080/http
-              env: ${{ secrets.TTBKEY }}
+              env:
+                - name: ttbkey
+                - secret: ttbkey
             context:
               git:
                 ref: ${{ github.ref }}
