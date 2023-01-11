@@ -26,7 +26,7 @@ jobs:
               ports: 8080/http
               env:
                 - name: ttbkey
-                - secret: ttbkey
+                  secret: ttbkey
             context:
               git:
                 ref: ${{ github.ref }}
