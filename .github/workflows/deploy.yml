@@ -21,7 +21,7 @@ jobs:
           project: veggente/who-sells-all
           yaml: |-
             name: wsa-api
-            app: go@1.17
+            app: golang@1.17
             options:
               ports: 8080/http
               env: ${{ secrets.TTBKEY }}
