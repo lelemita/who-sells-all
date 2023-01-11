@@ -142,6 +142,33 @@ func (s *Searcher) getProposals(isbns []string) Proposals {
 	return result
 }
 
+func (s *Searcher) getForOneIsbn(isbn string, chIsbn chan<- Proposals) {
+	totalResult := Proposals{}
+	itemId, err := s.getItemIdByIsbn(isbn)
+	if err != nil {
+		chIsbn <- totalResult
+		return
+	}
+	// TabType=0: 전체 목록 / SortOrder=9: 저가격순
+	baseUrl := fmt.Sprintf("%s%s?TabType=0&SortOrder=9&ItemId=%s", s.apiHost, PATH_USED_ITEM_MALL, itemId)
+	totalPage := getPages(baseUrl)
+	chPage := make(chan Proposals)
+	for page := 1; page <= totalPage; page++ {
+		go s.extractFromPage(itemId, page, chPage)
+	}
+	for page := 1; page <= totalPage; page++ {
+		pageResult := <-chPage
+		for sName, seller := range pageResult {
+			if s, isExist := totalResult[sName]; isExist {
+				s.Books = append(s.Books, seller.Books...)
+			} else {
+				totalResult[sName] = seller
+			}
+		}
+	}
+	chIsbn <- totalResult
+}
+
 func (s *Searcher) getItemIdByIsbn(isbn string) (string, error) {
 	if itemInfo, err := s.getAladinInfo(isbn); err != nil {
 		return "", err
@@ -181,34 +208,6 @@ func (s *Searcher) getAladinInfo(isbn string) (*ItemLookUpResult, error) {
 		return nil, errors.New("fail to find item")
 	}
 	return &respInfo.Item[0], nil
-}
-
-// TODO 좀 더 정리하자 getIdByIsbn 도 같이..
-func (s *Searcher) getForOneIsbn(isbn string, chIsbn chan<- Proposals) {
-	totalResult := Proposals{}
-	itemId, err := s.getItemIdByIsbn(isbn)
-	if err != nil {
-		chIsbn <- totalResult
-		return
-	}
-	// TabType=0: 전체 목록 / SortOrder=9: 저가격순
-	baseUrl := fmt.Sprintf("%s%s?TabType=0&SortOrder=9&ItemId=%s", s.apiHost, PATH_USED_ITEM_MALL, itemId)
-	totalPage := getPages(baseUrl)
-	chPage := make(chan Proposals)
-	for page := 1; page <= totalPage; page++ {
-		go s.extractFromPage(itemId, page, chPage)
-	}
-	for page := 1; page <= totalPage; page++ {
-		pageResult := <-chPage
-		for sName, seller := range pageResult {
-			if s, isExist := totalResult[sName]; isExist {
-				s.Books = append(s.Books, seller.Books...)
-			} else {
-				totalResult[sName] = seller
-			}
-		}
-	}
-	chIsbn <- totalResult
 }
 
 func (s *Searcher) extractFromPage(itemId string, page int, chPage chan<- Proposals) {
