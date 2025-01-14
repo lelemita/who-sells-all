@@ -1,6 +1,6 @@
 module github.com/lelemita/who_sells_all
 
-go 1.19
+go 1.23
 
 require (
 	github.com/PuerkitoBio/goquery v1.8.0
