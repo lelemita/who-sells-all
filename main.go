@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"net/url"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/lelemita/who_sells_all/searcher"
 )
+
+var templates = template.Must(template.ParseGlob("templates/*.html"))
 
 // TODO write test code
 // // 1페이지 결과, 여러페이지 결과, 없는 결과
@@ -22,8 +25,10 @@ func main() {
 	genie := searcher.NewSearcher("https://www.aladin.co.kr", ttbkey)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"message": "hello 2023 0111"}`)
+		err := templates.ExecuteTemplate(w, "index.html", nil)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	})
 
 	http.HandleFunc("/v1/proposals", func(w http.ResponseWriter, req *http.Request) {
