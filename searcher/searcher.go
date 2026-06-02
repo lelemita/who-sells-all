@@ -15,11 +15,16 @@ import (
 )
 
 const (
+	PATH_SEARCH_ITEMS   = "/ttb/api/ItemSearch.aspx"
 	PATH_ITEM_LOOK_UP   = "/ttb/api/ItemLookUp.aspx"
 	PATH_USED_ITEM_MALL = "/shop/UsedShop/wuseditemall.aspx"
 )
 
 var regex_only_num = regexp.MustCompile("[^0-9]")
+
+type BookMetaList struct {
+	Books []BookMeta `json:"item"` // item: aladin API response parsing 을 위한 이름
+}
 
 type ItemLookUpList struct {
 	Item []ItemLookUpResult `json:"item"`
@@ -49,10 +54,20 @@ type Proposals map[SellerName]Seller
 type Seller struct {
 	Link        string
 	DeliveryFee string
-	Books       []Book
+	Books       []UsedBook
 }
 
-type Book struct {
+// 책의 고유 정보: 키워드로 ISBN을 찾기 위한 구조
+type BookMeta struct {
+	Itemid uint   `json:"itemId"`
+	Isbn13 string `json:"isbn13"`
+	Title  string `json:"title"`
+	Author string `json:"author"`
+	Cover  string `json:"cover"`
+}
+
+// 중고 매물 정보
+type UsedBook struct {
 	ItemId string
 	Price  uint
 	Status string
@@ -90,6 +105,45 @@ func NewSearcher(host string, ttbkey string) Searcher {
 		apiHost: host,
 		ttbkey:  ttbkey,
 	}
+}
+
+// Search book list by keyword
+func (s *Searcher) Search(keyword string) (*BookMetaList, error) {
+	// TODO pagination
+	return s.searchWithPagination(keyword, 1, 10)
+}
+
+func (s *Searcher) searchWithPagination(keyword string, pageNum int, pageSize int) (*BookMetaList, error) {
+	url := s.apiHost + PATH_SEARCH_ITEMS
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	qry := req.URL.Query()
+	qry.Add("ttbkey", s.ttbkey)
+	qry.Add("Query", keyword)
+	qry.Add("output", "js")
+	qry.Add("Start", intToStr(pageNum))
+	qry.Add("MaxResults", intToStr(pageSize))
+	qry.Add("version", "20131101")
+	qry.Add("Cover", "Big")
+	req.URL.RawQuery = qry.Encode()
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	checkErr(err)
+	checkCode(resp)
+	defer resp.Body.Close()
+
+	respBytes, _ := io.ReadAll(resp.Body)
+	respInfo := &BookMetaList{}
+	if err := json.Unmarshal(respBytes, respInfo); err != nil {
+		return nil, err
+	}
+	if len(respInfo.Books) == 0 {
+		return nil, errors.New("fail to find item")
+	}
+	return respInfo, nil
 }
 
 // Scrape Aladin used bookstore by isbn list
@@ -248,7 +302,7 @@ func (s *Searcher) extractFromPage(itemId string, page int, chPage chan<- Propos
 func extractFromTr(itemId string, tr *goquery.Selection, ch chan<- Proposals) {
 	var sName SellerName
 	seller := Seller{}
-	book := Book{ItemId: itemId}
+	book := UsedBook{ItemId: itemId}
 	tr.Find("td").Each(func(j int, td *goquery.Selection) {
 		tdTag := td.Find("div")
 		if tdTag.HasClass("seller") {
@@ -270,7 +324,7 @@ func extractFromTr(itemId string, tr *goquery.Selection, ch chan<- Proposals) {
 		}
 	})
 
-	seller.Books = []Book{book}
+	seller.Books = []UsedBook{book}
 	ch <- Proposals{
 		sName: seller,
 	}
