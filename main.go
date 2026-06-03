@@ -67,5 +67,43 @@ func main() {
 		fmt.Fprint(w, string(jsonByte))
 	})
 
+	http.HandleFunc("/v1/search", func(w http.ResponseWriter, req *http.Request) {
+		defer func() {
+			if err := recover(); err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprintf(w, `{"message": "error in process"}`)
+				fmt.Fprintln(os.Stderr, err)
+			}
+		}()
+
+		w.Header().Add("Content-Type", "application/json; charset=utf-8")
+		qry, err := url.ParseQuery(req.URL.RawQuery)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(w, `{"message": "error in ParseQuery"}`)
+			return
+		}
+		q, isExist := qry["q"]
+		if !isExist || len(q) == 0 || q[0] == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(w, `{"message": "empty query q"}`)
+			return
+		}
+		output, err := genie.Search(q[0])
+		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w, `{"message": "%s"}`, err.Error())
+			return
+		}
+		jsonByte, err := json.Marshal(output)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, `{"message": "error in json.Marshal"}`)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, string(jsonByte))
+	})
+
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
