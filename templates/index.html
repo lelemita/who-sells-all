@@ -93,7 +93,7 @@
                     </svg>
                 </div>
                 <h3 class="text-slate-900 font-semibold mb-1">장바구니가 비어 있습니다</h3>
-                <p class="text-sm text-slate-400 max-w-xs mb-6">책을 추가해 한 번에 취급하는 최고의 중고 판매점을 탐색해보세요!</p>
+                <p class="text-sm text-slate-400 max-w-xs mb-6">여러 책을 한 번에 취급하는 판매자를 탐색해보세요!</p>
                 <button onclick="openSearchModal()"
                     class="inline-flex items-center gap-2 text-sm font-semibold bg-slate-900 hover:bg-slate-800 text-white px-5 py-2.5 rounded-xl shadow-md transition duration-200 cursor-pointer">
                     <span>도서 추가하기</span>
@@ -155,7 +155,7 @@
                         </svg>
                     </div>
                     <p class="text-sm font-medium">결과가 여기에 표시됩니다.</p>
-                    <p class="text-xs text-slate-400 max-w-xs mt-1">책을 담고 '판매점 검색' 버튼을 클릭해 결과를 확인해 보세요.</p>
+                    <p class="text-xs text-slate-400 max-w-xs mt-1">책을 담고 '판매자 검색' 버튼을 클릭해 결과를 확인해 보세요.</p>
                 </div>
 
                 <!-- Loading Spinner & Skeletons -->
@@ -442,6 +442,25 @@
             modal.classList.add('pointer-events-none', 'opacity-0');
             modal.querySelector('div').classList.remove('scale-100');
             modal.querySelector('div').classList.add('scale-95');
+
+            // reset modal elements
+            const searchInput = document.getElementById('modal-search-input');
+            if (searchInput) {
+                searchInput.value = '';
+            }
+            const emptyState = document.getElementById('search-modal-empty');
+            if (emptyState) {
+                emptyState.classList.remove('hidden');
+            }
+            const loadingState = document.getElementById('search-modal-loading');
+            if (loadingState) {
+                loadingState.classList.add('hidden');
+            }
+            const resultList = document.getElementById('search-modal-results');
+            if (resultList) {
+                resultList.classList.add('hidden');
+                resultList.innerHTML = '';
+            }
         }
 
         async function performSearch(e) {
@@ -610,7 +629,7 @@
                             </svg>
                         </div>
                         <p class="text-sm font-semibold">매칭되는 판매자 없음</p>
-                        <p class="text-xs text-slate-400 max-w-xs mt-1">선택하신 도서 ${selectedBooks.length}권을 전부 가지고 있는 판매점이 존재하지 않습니다.</p>
+                        <p class="text-xs text-slate-400 max-w-xs mt-1">선택하신 도서 ${selectedBooks.length}권을 전부 가지고 있는 판매자가 존재하지 않습니다.</p>
                     </div>
                 `;
                 return;
@@ -626,11 +645,12 @@
                 card.className = 'bg-slate-50 border border-slate-100 hover:border-indigo-100 p-5 rounded-2xl transition duration-200 group flex flex-col justify-between gap-4';
 
                 const displayFeeStr = seller.deliveryFee || '배송비 정보 없음';
+                const displaySellerName = seller.name || '알라딘';
 
                 card.innerHTML = `
                     <div class="flex flex-col gap-2.5">
                         <div class="flex items-center justify-between">
-                            <h4 class="font-bold text-slate-900 group-hover:text-indigo-600 transition duration-150 line-clamp-1">${seller.name}</h4>
+                            <h4 class="font-bold text-slate-900 group-hover:text-indigo-600 transition duration-150 line-clamp-1">${displaySellerName}</h4>
                             <span class="text-lg font-extrabold text-slate-950 font-outfit mt-0.5">
                                 ${seller.totalPrice.toLocaleString()}원
                             </span>
@@ -654,7 +674,7 @@
             // Append info footnote at the end of the list
             const note = document.createElement('div');
             note.className = 'text-[10px] text-slate-400/80 leading-relaxed font-medium mt-2.5 px-1 border-l-2 border-slate-200 pl-2.5';
-            note.innerHTML = `* 배송비 정보는 매장 검색 결과를 참고용으로 표시한 것이며, 총 도서 가격에 반영되어 있지 않습니다. 판매점의 무료 배송 조건(예: N만원 이상 무료)과 최종 배송비는 알라딘 장바구니에서 확인해 주시기 바랍니다.`;
+            note.innerHTML = `* 배송비 정보는 참고용이며, 총 가격에 반영되어 있지 않습니다. 판매자의 무료 배송 조건 및 최종 배송비는 알라딘에서 확인해 주시기 바랍니다.`;
             proposalsList.appendChild(note);
         }
 
