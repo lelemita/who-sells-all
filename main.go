@@ -20,6 +20,7 @@ import (
 var templates = template.Must(template.ParseGlob("templates/*.html"))
 
 type ctxKey string
+
 const requestIDKey ctxKey = "rid"
 
 type ContextHandler struct {
@@ -51,8 +52,6 @@ func initLogger() {
 
 func main() {
 	initLogger()
-
-	// TODO ttbkey 있는지 확인하고 없으면 exit
 	ttbkey := os.Getenv("ttbkey")
 	if len(ttbkey) == 0 {
 		slog.Error("ttbkey value is required")
@@ -170,12 +169,12 @@ func requestIDMiddleware(next http.Handler) http.Handler {
 func loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		start := time.Now()
-        slog.DebugContext(req.Context(), "Request started",
-            slog.String("method", req.Method),
-            slog.String("path", req.URL.Path),
-            slog.String("remote_addr", req.RemoteAddr),
-        )
-        
+		slog.DebugContext(req.Context(), "Request started",
+			slog.String("method", req.Method),
+			slog.String("path", req.URL.Path),
+			slog.String("remote_addr", req.RemoteAddr),
+		)
+
 		sw := &statusWriter{ResponseWriter: w, statusCode: http.StatusOK}
 		next.ServeHTTP(sw, req)
 

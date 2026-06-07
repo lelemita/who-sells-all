@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 )
 
 const RESP_ITEMLOOKUP = `{
@@ -74,5 +75,6 @@ func RunAladinApiMock(wg *sync.WaitGroup) {
 		fmt.Fprint(w, RESP_ITEMLOOKUP)
 	})
 	go srv.ListenAndServe()
-	fmt.Println("aladinAPI mock server is running")
+	time.Sleep(time.Millisecond * 100)
+	fmt.Println("aladin API mock server is running")
 }

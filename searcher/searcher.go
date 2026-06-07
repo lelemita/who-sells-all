@@ -55,7 +55,7 @@ type Proposals map[SellerName]Seller
 type Seller struct {
 	Link        string
 	DeliveryFee string
-	Books       []UsedBook
+	Books       map[string]UsedBook // isbn13: UsedBook
 }
 
 // 책의 고유 정보: 키워드로 ISBN을 찾기 위한 구조
@@ -69,7 +69,6 @@ type BookMeta struct {
 
 // 중고 매물 정보
 type UsedBook struct {
-	ItemId string
 	Price  uint
 	Status string
 	Link   string
@@ -111,7 +110,7 @@ func NewSearcher(host string, ttbkey string) Searcher {
 // Search book list by keyword
 func (s *Searcher) Search(ctx context.Context, keyword string) (*BookMetaList, error) {
 	// TODO pagination
-	return s.searchWithPagination(ctx, keyword, 1, 10)
+	return s.searchWithPagination(ctx, keyword, 1, 20)
 }
 
 func (s *Searcher) searchWithPagination(ctx context.Context, keyword string, pageNum int, pageSize int) (*BookMetaList, error) {
@@ -183,10 +182,12 @@ func (s *Searcher) getProposals(ctx context.Context, isbns []string) Proposals {
 	}
 
 	for i := 0; i < len(isbns); i++ {
+		isbn := isbns[i]
 		proposals := <-chIsbn
 		for sName, s := range proposals {
 			if seller, isExist := sellers[sName]; isExist {
-				seller.Books = append(seller.Books, s.Books...)
+				// TODO 아래 부분 테스트 필요
+				seller.Books[isbn] = s.Books[isbn]
 				sellers[sName] = seller
 			} else {
 				sellers[sName] = s
@@ -194,7 +195,7 @@ func (s *Searcher) getProposals(ctx context.Context, isbns []string) Proposals {
 		}
 	}
 
-	// TODO 현재는 다 가진 셀러만 보여줌, 일부도 보여주려면 기준 필요, 가중치?
+	// SOMEDAY 현재는 다 가진 셀러만 보여줌, 일부도 보여주려면 기준 필요, 가중치?
 	result := Proposals{}
 	for sName, seller := range sellers {
 		if len(seller.Books) >= len(isbns) {
@@ -216,19 +217,30 @@ func (s *Searcher) getForOneIsbn(ctx context.Context, isbn string, chIsbn chan<-
 	totalPage := getPages(ctx, baseUrl)
 	chPage := make(chan Proposals)
 	for page := 1; page <= totalPage; page++ {
-		go s.extractFromPage(ctx, itemId, page, chPage)
+		go s.extractFromPage(ctx, isbn, itemId, page, chPage)
 	}
 	for page := 1; page <= totalPage; page++ {
 		pageResult := <-chPage
 		for sName, seller := range pageResult {
 			if s, isExist := totalResult[sName]; isExist {
-				s.Books = append(s.Books, seller.Books...)
+				appendBooks(s.Books, seller.Books)
 			} else {
 				totalResult[sName] = seller
 			}
 		}
 	}
 	chIsbn <- totalResult
+}
+
+// 저렴한 가격 기준으로 중복 제거하며 합치기
+func appendBooks(target map[string]UsedBook, appending map[string]UsedBook) {
+	for isbn, new := range appending {
+		if _, isExist := target[isbn]; !isExist {
+			target[isbn] = new
+		} else if target[isbn].Price > new.Price {
+			target[isbn] = new
+		}
+	}
 }
 
 func (s *Searcher) getItemIdByIsbn(ctx context.Context, isbn string) (string, error) {
@@ -280,7 +292,8 @@ func (s *Searcher) getAladinInfo(ctx context.Context, isbn string) (*ItemLookUpR
 	return &respInfo.Item[0], nil
 }
 
-func (s *Searcher) extractFromPage(ctx context.Context, itemId string, page int, chPage chan<- Proposals) {
+// TODO input parameter 줄이기
+func (s *Searcher) extractFromPage(ctx context.Context, isbn string, itemId string, page int, chPage chan<- Proposals) {
 	pageUrl := fmt.Sprintf("%s%s?TabType=0&SortOrder=9&ItemId=%s&page=%d", s.apiHost, PATH_USED_ITEM_MALL, itemId, page)
 	pageResult := Proposals{}
 	chTr := make(chan Proposals)
@@ -318,15 +331,14 @@ func (s *Searcher) extractFromPage(ctx context.Context, itemId string, page int,
 		if i == 0 {
 			return
 		}
-		go extractFromTr(itemId, tr, chTr)
+		go extractFromTr(isbn, tr, chTr)
 	})
 
 	for i := 0; i < trLength-1; i++ {
 		trResult := <-chTr
 		for sName, seller := range trResult {
 			if s, isExist := pageResult[sName]; isExist {
-				// 여기서 그냥 더하면 안되고 ItemId별로 최저가인 경우에만 더해야 함
-				s.Books = append(s.Books, seller.Books...)
+				appendBooks(s.Books, seller.Books)
 				pageResult[sName] = s
 			} else {
 				pageResult[sName] = seller
@@ -336,10 +348,10 @@ func (s *Searcher) extractFromPage(ctx context.Context, itemId string, page int,
 	chPage <- pageResult
 }
 
-func extractFromTr(itemId string, tr *goquery.Selection, ch chan<- Proposals) {
+func extractFromTr(isbn string, tr *goquery.Selection, ch chan<- Proposals) {
 	var sName SellerName
 	seller := Seller{}
-	book := UsedBook{ItemId: itemId}
+	book := UsedBook{}
 	tr.Find("td").Each(func(j int, td *goquery.Selection) {
 		tdTag := td.Find("div")
 		if tdTag.HasClass("seller") {
@@ -361,7 +373,7 @@ func extractFromTr(itemId string, tr *goquery.Selection, ch chan<- Proposals) {
 		}
 	})
 
-	seller.Books = []UsedBook{book}
+	seller.Books = map[string]UsedBook{isbn: book}
 	ch <- Proposals{
 		sName: seller,
 	}
@@ -411,12 +423,5 @@ func checkCode(ctx context.Context, resp *http.Response) {
 			slog.Int("status", resp.StatusCode),
 			slog.String("url", urlStr),
 		)
-	}
-}
-
-// TODO goroutine 내에서의 에러와 recover 어떻게 처리할지 생각해보기
-func checkErr(err error) {
-	if err != nil {
-		slog.Error("Operation failed", slog.Any("error", err))
 	}
 }
