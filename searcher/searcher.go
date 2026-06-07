@@ -1,12 +1,13 @@
 package searcher
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
-	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -108,12 +109,12 @@ func NewSearcher(host string, ttbkey string) Searcher {
 }
 
 // Search book list by keyword
-func (s *Searcher) Search(keyword string) (*BookMetaList, error) {
+func (s *Searcher) Search(ctx context.Context, keyword string) (*BookMetaList, error) {
 	// TODO pagination
-	return s.searchWithPagination(keyword, 1, 10)
+	return s.searchWithPagination(ctx, keyword, 1, 10)
 }
 
-func (s *Searcher) searchWithPagination(keyword string, pageNum int, pageSize int) (*BookMetaList, error) {
+func (s *Searcher) searchWithPagination(ctx context.Context, keyword string, pageNum int, pageSize int) (*BookMetaList, error) {
 	url := s.apiHost + PATH_SEARCH_ITEMS
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -131,13 +132,21 @@ func (s *Searcher) searchWithPagination(keyword string, pageNum int, pageSize in
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
-	checkErr(err)
-	checkCode(resp)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to execute search query request", slog.String("keyword", keyword), slog.Any("error", err))
+		return nil, err
+	}
 	defer resp.Body.Close()
+	checkCode(ctx, resp)
 
-	respBytes, _ := io.ReadAll(resp.Body)
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to read search response body", slog.String("keyword", keyword), slog.Any("error", err))
+		return nil, err
+	}
 	respInfo := &BookMetaList{}
 	if err := json.Unmarshal(respBytes, respInfo); err != nil {
+		slog.ErrorContext(ctx, "Failed to unmarshal search response", slog.String("keyword", keyword), slog.Any("error", err))
 		return nil, err
 	}
 	if len(respInfo.Books) == 0 {
@@ -147,9 +156,9 @@ func (s *Searcher) searchWithPagination(keyword string, pageNum int, pageSize in
 }
 
 // Scrape Aladin used bookstore by isbn list
-func (s *Searcher) GetOrderedList(isbns []string) ShopList {
+func (s *Searcher) GetOrderedList(ctx context.Context, isbns []string) ShopList {
 	output := ShopList{}
-	proposals := s.getProposals(isbns)
+	proposals := s.getProposals(ctx, isbns)
 	for sName, seller := range proposals {
 		shop := Shop{
 			Name:        sName,
@@ -159,7 +168,6 @@ func (s *Searcher) GetOrderedList(isbns []string) ShopList {
 		for _, book := range seller.Books {
 			shop.TotalPrice += book.Price
 		}
-		// Think 배송비 반영 해야 하려나? 얼마이상 무료배송 이런거 까지 고려해야 할지도..
 		output = append(output, shop)
 	}
 
@@ -167,11 +175,11 @@ func (s *Searcher) GetOrderedList(isbns []string) ShopList {
 	return output
 }
 
-func (s *Searcher) getProposals(isbns []string) Proposals {
+func (s *Searcher) getProposals(ctx context.Context, isbns []string) Proposals {
 	sellers := Proposals{}
 	chIsbn := make(chan Proposals)
 	for _, isbn := range isbns {
-		go s.getForOneIsbn(isbn, chIsbn)
+		go s.getForOneIsbn(ctx, isbn, chIsbn)
 	}
 
 	for i := 0; i < len(isbns); i++ {
@@ -196,19 +204,19 @@ func (s *Searcher) getProposals(isbns []string) Proposals {
 	return result
 }
 
-func (s *Searcher) getForOneIsbn(isbn string, chIsbn chan<- Proposals) {
+func (s *Searcher) getForOneIsbn(ctx context.Context, isbn string, chIsbn chan<- Proposals) {
 	totalResult := Proposals{}
-	itemId, err := s.getItemIdByIsbn(isbn)
+	itemId, err := s.getItemIdByIsbn(ctx, isbn)
 	if err != nil {
 		chIsbn <- totalResult
 		return
 	}
 	// TabType=0: 전체 목록 / SortOrder=9: 저가격순
 	baseUrl := fmt.Sprintf("%s%s?TabType=0&SortOrder=9&ItemId=%s", s.apiHost, PATH_USED_ITEM_MALL, itemId)
-	totalPage := getPages(baseUrl)
+	totalPage := getPages(ctx, baseUrl)
 	chPage := make(chan Proposals)
 	for page := 1; page <= totalPage; page++ {
-		go s.extractFromPage(itemId, page, chPage)
+		go s.extractFromPage(ctx, itemId, page, chPage)
 	}
 	for page := 1; page <= totalPage; page++ {
 		pageResult := <-chPage
@@ -223,8 +231,8 @@ func (s *Searcher) getForOneIsbn(isbn string, chIsbn chan<- Proposals) {
 	chIsbn <- totalResult
 }
 
-func (s *Searcher) getItemIdByIsbn(isbn string) (string, error) {
-	if itemInfo, err := s.getAladinInfo(isbn); err != nil {
+func (s *Searcher) getItemIdByIsbn(ctx context.Context, isbn string) (string, error) {
+	if itemInfo, err := s.getAladinInfo(ctx, isbn); err != nil {
 		return "", err
 	} else {
 		itemId := strconv.Itoa(int(itemInfo.ItemId))
@@ -232,7 +240,7 @@ func (s *Searcher) getItemIdByIsbn(isbn string) (string, error) {
 	}
 }
 
-func (s *Searcher) getAladinInfo(isbn string) (*ItemLookUpResult, error) {
+func (s *Searcher) getAladinInfo(ctx context.Context, isbn string) (*ItemLookUpResult, error) {
 	url := s.apiHost + PATH_ITEM_LOOK_UP
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -249,13 +257,21 @@ func (s *Searcher) getAladinInfo(isbn string) (*ItemLookUpResult, error) {
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
-	checkErr(err)
-	checkCode(resp)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to get Aladin info request", slog.String("isbn", isbn), slog.Any("error", err))
+		return nil, err
+	}
 	defer resp.Body.Close()
+	checkCode(ctx, resp)
 
-	respBytes, _ := io.ReadAll(resp.Body)
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to read Aladin info response body", slog.String("isbn", isbn), slog.Any("error", err))
+		return nil, err
+	}
 	respInfo := &ItemLookUpList{}
 	if err := json.Unmarshal(respBytes, respInfo); err != nil {
+		slog.ErrorContext(ctx, "Failed to unmarshal Aladin info response", slog.String("isbn", isbn), slog.Any("error", err))
 		return nil, err
 	}
 	if len(respInfo.Item) == 0 {
@@ -264,21 +280,40 @@ func (s *Searcher) getAladinInfo(isbn string) (*ItemLookUpResult, error) {
 	return &respInfo.Item[0], nil
 }
 
-func (s *Searcher) extractFromPage(itemId string, page int, chPage chan<- Proposals) {
+func (s *Searcher) extractFromPage(ctx context.Context, itemId string, page int, chPage chan<- Proposals) {
 	pageUrl := fmt.Sprintf("%s%s?TabType=0&SortOrder=9&ItemId=%s&page=%d", s.apiHost, PATH_USED_ITEM_MALL, itemId, page)
 	pageResult := Proposals{}
 	chTr := make(chan Proposals)
 
-	// TODO 로거 만들어서 develop 모드에서는 출력하자
-	// log.Println("Requesting... ", pageUrl)
+	slog.DebugContext(ctx, "Requesting page details",
+		slog.String("itemId", itemId),
+		slog.Int("page", page),
+		slog.String("url", pageUrl),
+	)
+
 	resp, err := http.Get(pageUrl)
-	checkErr(err)
-	checkCode(resp)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to request page URL", slog.String("url", pageUrl), slog.Any("error", err))
+		chPage <- pageResult
+		return
+	}
 	defer resp.Body.Close()
+	checkCode(ctx, resp)
 
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
-	checkErr(err)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to parse document from body", slog.String("url", pageUrl), slog.Any("error", err))
+		chPage <- pageResult
+		return
+	}
+
 	trTag := doc.Find(".Ere_usedsell_table > table > tbody > tr")
+	trLength := trTag.Length()
+	if trLength <= 1 {
+		chPage <- pageResult
+		return
+	}
+
 	trTag.Each(func(i int, tr *goquery.Selection) {
 		if i == 0 {
 			return
@@ -286,11 +321,13 @@ func (s *Searcher) extractFromPage(itemId string, page int, chPage chan<- Propos
 		go extractFromTr(itemId, tr, chTr)
 	})
 
-	for i := 0; i < trTag.Length()-1; i++ {
+	for i := 0; i < trLength-1; i++ {
 		trResult := <-chTr
 		for sName, seller := range trResult {
 			if s, isExist := pageResult[sName]; isExist {
+				// 여기서 그냥 더하면 안되고 ItemId별로 최저가인 경우에만 더해야 함
 				s.Books = append(s.Books, seller.Books...)
+				pageResult[sName] = s
 			} else {
 				pageResult[sName] = seller
 			}
@@ -330,14 +367,20 @@ func extractFromTr(itemId string, tr *goquery.Selection, ch chan<- Proposals) {
 	}
 }
 
-func getPages(url string) int {
+func getPages(ctx context.Context, url string) int {
 	resp, err := http.Get(url)
-	checkErr(err)
-	checkCode(resp)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to get page count from URL", slog.String("url", url), slog.Any("error", err))
+		return 1
+	}
 	defer resp.Body.Close()
+	checkCode(ctx, resp)
 
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
-	checkErr(err)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to parse page count document", slog.String("url", url), slog.Any("error", err))
+		return 1
+	}
 	pageNum := doc.Find(".Ere_usedsell_num_box > div > div > ul > li").Length()
 	if pageNum == 0 {
 		pageNum = 1
@@ -348,20 +391,32 @@ func getPages(url string) int {
 func parsePrice(strPrice string) uint {
 	price := regex_only_num.ReplaceAllString(strPrice, "")
 	result, err := strconv.ParseUint(price, 0, 64)
-	checkErr(err)
+	if err != nil {
+		slog.Error("Failed to parse price", slog.String("value", strPrice), slog.Any("error", err))
+	}
 	return uint(result)
 }
 
-func checkCode(resp *http.Response) {
+func checkCode(ctx context.Context, resp *http.Response) {
+	if resp == nil {
+		slog.ErrorContext(ctx, "Response is nil")
+		return
+	}
 	if resp.StatusCode != http.StatusOK {
-		// TODO 에러 타입 정의 필요
-		fmt.Fprintf(os.Stderr, "Request failed with Status: %d", resp.StatusCode)
+		urlStr := ""
+		if resp.Request != nil && resp.Request.URL != nil {
+			urlStr = resp.Request.URL.String()
+		}
+		slog.WarnContext(ctx, "Request failed",
+			slog.Int("status", resp.StatusCode),
+			slog.String("url", urlStr),
+		)
 	}
 }
 
 // TODO goroutine 내에서의 에러와 recover 어떻게 처리할지 생각해보기
 func checkErr(err error) {
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		slog.Error("Operation failed", slog.Any("error", err))
 	}
 }

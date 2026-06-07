@@ -1,6 +1,7 @@
 package searcher
 
 import (
+	"context"
 	"log"
 	"os"
 	"testing"
@@ -20,7 +21,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestSearch(t *testing.T) {
-	results, err := genie.Search("김초엽")
+	results, err := genie.Search(context.Background(), "김초엽")
 	if err != nil {
 		t.Error(err)
 	}
