@@ -46,6 +46,7 @@ func TestSearch(t *testing.T) {
 	}
 }
 
+// 동일한 책이 두 권이상 있을 때, 최저가인 것만 저장하는지 확인
 func TestExtractFromPage(t *testing.T) {
 	target := NewSearcher("http://localhost:8082", "ttbkey")
 	chPage := make(chan Proposals)

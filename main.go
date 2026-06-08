@@ -83,6 +83,8 @@ func main() {
 			return
 		}
 		output := genie.GetOrderedList(req.Context(), isbns)
+		slog.InfoContext(req.Context(), "result", "isbns", isbns, "len", len(output))
+
 		jsonByte, err := json.Marshal(map[string]searcher.ShopList{"result": output})
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -173,6 +175,7 @@ func loggingMiddleware(next http.Handler) http.Handler {
 			slog.String("method", req.Method),
 			slog.String("path", req.URL.Path),
 			slog.String("remote_addr", req.RemoteAddr),
+			slog.String("user_agent", req.UserAgent()),
 		)
 
 		sw := &statusWriter{ResponseWriter: w, statusCode: http.StatusOK}

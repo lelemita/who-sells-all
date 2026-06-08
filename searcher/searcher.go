@@ -52,6 +52,11 @@ type SellerName string
 
 type Proposals map[SellerName]Seller
 
+type IsbnResult struct {
+	Isbn      string
+	Proposals Proposals
+}
+
 type Seller struct {
 	Link        string
 	DeliveryFee string
@@ -176,17 +181,16 @@ func (s *Searcher) GetOrderedList(ctx context.Context, isbns []string) ShopList 
 
 func (s *Searcher) getProposals(ctx context.Context, isbns []string) Proposals {
 	sellers := Proposals{}
-	chIsbn := make(chan Proposals)
+	chIsbn := make(chan IsbnResult)
 	for _, isbn := range isbns {
 		go s.getForOneIsbn(ctx, isbn, chIsbn)
 	}
 
 	for i := 0; i < len(isbns); i++ {
-		isbn := isbns[i]
-		proposals := <-chIsbn
-		for sName, s := range proposals {
+		isbnResult := <-chIsbn
+		isbn := isbnResult.Isbn
+		for sName, s := range isbnResult.Proposals {
 			if seller, isExist := sellers[sName]; isExist {
-				// TODO 아래 부분 테스트 필요
 				seller.Books[isbn] = s.Books[isbn]
 				sellers[sName] = seller
 			} else {
@@ -202,16 +206,19 @@ func (s *Searcher) getProposals(ctx context.Context, isbns []string) Proposals {
 			result[sName] = seller
 		}
 	}
+	slog.DebugContext(ctx, "getProposals-result", "len", len(result))
 	return result
 }
 
-func (s *Searcher) getForOneIsbn(ctx context.Context, isbn string, chIsbn chan<- Proposals) {
-	totalResult := Proposals{}
+func (s *Searcher) getForOneIsbn(ctx context.Context, isbn string, chIsbn chan<- IsbnResult) {
+	isbnResult := IsbnResult{Isbn: isbn}
+	proposals := Proposals{}
 	itemId, err := s.getItemIdByIsbn(ctx, isbn)
 	if err != nil {
-		chIsbn <- totalResult
+		chIsbn <- isbnResult
 		return
 	}
+
 	// TabType=0: 전체 목록 / SortOrder=9: 저가격순
 	baseUrl := fmt.Sprintf("%s%s?TabType=0&SortOrder=9&ItemId=%s", s.apiHost, PATH_USED_ITEM_MALL, itemId)
 	totalPage := getPages(ctx, baseUrl)
@@ -222,14 +229,17 @@ func (s *Searcher) getForOneIsbn(ctx context.Context, isbn string, chIsbn chan<-
 	for page := 1; page <= totalPage; page++ {
 		pageResult := <-chPage
 		for sName, seller := range pageResult {
-			if s, isExist := totalResult[sName]; isExist {
+			if s, isExist := proposals[sName]; isExist {
 				appendBooks(s.Books, seller.Books)
 			} else {
-				totalResult[sName] = seller
+				proposals[sName] = seller
 			}
 		}
 	}
-	chIsbn <- totalResult
+
+	slog.DebugContext(ctx, "GetForOneIsbn-result", "isbn", isbn, "len", len(proposals))
+	isbnResult.Proposals = proposals
+	chIsbn <- isbnResult
 }
 
 // 저렴한 가격 기준으로 중복 제거하며 합치기
@@ -298,11 +308,7 @@ func (s *Searcher) extractFromPage(ctx context.Context, isbn string, itemId stri
 	pageResult := Proposals{}
 	chTr := make(chan Proposals)
 
-	slog.DebugContext(ctx, "Requesting page details",
-		slog.String("itemId", itemId),
-		slog.Int("page", page),
-		slog.String("url", pageUrl),
-	)
+	slog.DebugContext(ctx, "Requesting page details", "isbn", isbn, "page", page)
 
 	resp, err := http.Get(pageUrl)
 	if err != nil {
@@ -323,6 +329,7 @@ func (s *Searcher) extractFromPage(ctx context.Context, isbn string, itemId stri
 	trTag := doc.Find(".Ere_usedsell_table > table > tbody > tr")
 	trLength := trTag.Length()
 	if trLength <= 1 {
+		slog.ErrorContext(ctx, "Failed to find tr tag", slog.String("url", pageUrl))
 		chPage <- pageResult
 		return
 	}
