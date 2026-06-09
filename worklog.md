@@ -9,12 +9,19 @@
     - AS-IS: `chan Proposals`
     - TO-BE: `chan isbnResult` (ISBN과 Proposals를 포함한 구조체)
 
+## 2026.0609.Tuesday.
+
+### upgrade
+    - Dependency alert: golang.org/x/net	
+        - Version < 0.13.0
+        - Upgrade to ~> 0.13.0
 
 
 ## TODOs
 ### search free server: cloudtype -> ?
     - cloudtype은 하루 한번씩 꺼짐
 ### log 관리
+    - 버전추가
     - ctx 활용
     - 가독성? 색상? beautify?
     - type?: text -> json?

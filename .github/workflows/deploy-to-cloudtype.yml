@@ -4,16 +4,12 @@ on:
     branches:
       - master
 
-permissions:
-  contents: write
-  actions: write
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
       - name: Connect repository
         uses: cloudtype-github-actions/connect@v1
         with:
@@ -27,7 +23,7 @@ jobs:
           project: veggente/who-sells-all
           yaml: |-
             name: wsa-api
-            app: golang@1.23
+            app: golang@1.25
             options:
               ports: 8080/http
               env:
